@@ -1,0 +1,65 @@
+# promtool test rules tests/rules_agent_test.yml  (clock starts at 0)
+rule_files:
+  - ../prometheus/agent.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'agent_gate_pending_approvals'
+        values: "0 0 1 1 1 1 0 0 0 0"
+      - series: 'agent_gate_stopped'
+        values: "0 0 0 0 0 1 1 1 0 0"
+      - series: 'agent_gate_chain_ok'
+        values: "1 1 1 1 1 1 1 1 0 0"
+      - series: 'agent_gate_decisions_total{tool="x",level="L1",decision="DENY"}'
+        values: "0 1 2 3 4 5 6 7 8 9"
+      - series: 'agent_gate_decisions_total{tool="y",level="L2",decision="DENY"}'
+        values: "0 0 0 0 0 0 0 0 0 0"
+      - series: 'agent_gate_textfile_last_run_timestamp'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 3m             # pending for 1 minute: not yet
+        alertname: AgentGateApprovalWaiting
+        exp_alerts: []
+      - eval_time: 4m             # pending for 2 minutes
+        alertname: AgentGateApprovalWaiting
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "1 L3 request(s) from the agent wait for gatectl approve"}
+      - eval_time: 7m
+        alertname: AgentGateApprovalWaiting
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AgentGateStopped
+        exp_alerts:
+          - exp_labels: {severity: info}
+            exp_annotations: {summary: "agent gate emergency stop is engaged, every call is denied"}
+      - eval_time: 8m
+        alertname: AgentGateChainBroken
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "agent gate audit chain does not verify; compare audit.jsonl with the journal lines in VictoriaLogs"}
+      - eval_time: 5m             # 5 denials so far: not more than 5
+        alertname: AgentGateDenials
+        exp_alerts: []
+      - eval_time: 9m             # 9 in the hour
+        alertname: AgentGateDenials
+        exp_alerts:
+          - exp_labels: {severity: info}
+            exp_annotations: {summary: "9 agent gate denials in the last hour"}
+
+  - interval: 1m
+    input_series:
+      - series: 'agent_gate_textfile_last_run_timestamp'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 34m
+        alertname: AgentGateTextfileStale
+        exp_alerts: []
+      - eval_time: 36m
+        alertname: AgentGateTextfileStale
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "gatectl textfile has not run for 30 minutes, agent gate metrics are stale"}

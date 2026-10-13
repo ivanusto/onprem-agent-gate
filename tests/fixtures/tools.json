@@ -1,0 +1,11 @@
+[
+  {"id": "pve.quorum_status", "level": "L1", "asset": "pve1/Proxmox VE", "argv": ["sh", "-c", "echo quorate=Yes votes=3/3; exit 0"], "description": "fake check.sh"},
+  {"id": "qdevice.service_status", "level": "L1", "asset": "qdevice/Debian", "argv": ["echo", "status", "{unit}"],
+   "params": {"unit": {"re": "^(corosync-qnetd|nftables)\\.service$"}}, "description": "fake status"},
+  {"id": "qdevice.restart_service", "level": "L2", "asset": "qdevice/Debian", "argv": ["echo", "restarted", "{unit}"],
+   "params": {"unit": {"re": "^corosync-qnetd\\.service$"}}, "description": "fake restart"},
+  {"id": "qdevice.reboot", "level": "L3", "asset": "qdevice/Debian", "argv": ["echo", "rebooting"], "description": "fake reboot"},
+  {"id": "local.slow", "level": "L1", "asset": "collector/Ubuntu", "argv": ["sleep", "5"], "description": "times out", "timeout_s": 1},
+  {"id": "local.big", "level": "L1", "asset": "collector/Ubuntu", "argv": ["sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x"], "description": "big stdout"},
+  {"id": "local.fail", "level": "L1", "asset": "collector/Ubuntu", "argv": ["sh", "-c", "echo bad >&2; exit 3"], "description": "non-zero"}
+]

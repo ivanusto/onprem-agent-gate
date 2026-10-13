@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""gatectl: the operator's side of onprem-agent-gate.
+
+    gatectl call <cr> <tool> [k=v ...] [--approval SEQ]   what the agent does, from a shell (tests, dry runs)
+    gatectl tools                                          the tools and their levels
+    gatectl pending                                        L3 requests waiting for a human
+    gatectl approve <seq>                                  approve one (as $SUDO_USER, must be the record's implementer or approver)
+    gatectl stop / resume                                  emergency stop: deny everything / lift it
+    gatectl verify [--vl URL]                              recompute the chain; with --vl also check every record has its journal line in VictoriaLogs
+    gatectl tail [N]                                       last N audit records
+    gatectl textfile --out /var/lib/node_exporter/textfile/agent-gate.prom
+
+Config: --config or GATE_CONFIG, default /etc/onprem-agent-gate/config.json.
+"""
+import argparse
+import getpass
+import json
+import os
+import sys
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gate"))
+from core import Gate, GateError, load_config  # noqa: E402
+import textfile  # noqa: E402
+
+
+def who():
+    return os.environ.get("SUDO_USER") or getpass.getuser()
+
+
+def cmd_call(gate, a):
+    params = {}
+    for kv in a.params:
+        k, sep, v = kv.partition("=")
+        if not sep:
+            sys.exit(f"param wants k=v, got {kv!r}")
+        params[k] = v
+    res = gate.call(a.cr, a.tool, params, a.approval)
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    return 0 if res["decision"] == "ALLOW" and res.get("rc", 0) == 0 else 1
+
+
+def cmd_tools(gate, a):
+    for t in gate.tools.values():
+        ps = " ".join(f"{k}=<{v['re']}>" for k, v in t["params"].items())
+        print(f"{t['id']:34} {t['level']}  {t['asset']:22} {ps}\n{'':34} {t['description']}")
+    return 0
+
+
+def cmd_pending(gate, a):
+    rows = gate.pending()
+    for r in rows:
+        print(f"seq={r['seq']} {r['ts']} {r['cr']} {r['tool']} {json.dumps(r['params'], ensure_ascii=False)} "
+              f"action={r['action_hash'][:16]}  ->  sudo gatectl approve {r['seq']}")
+    if not rows:
+        print("no pending requests")
+    return 0
+
+
+def cmd_approve(gate, a):
+    try:
+        ap = gate.approve(a.seq, who())
+    except GateError as e:
+        sys.exit(f"approve: {e}")
+    print(f"approved request {ap['request_seq']} ({ap['tool']} {json.dumps(ap['params'], ensure_ascii=False)} under {ap['cr']}) "
+          f"by {ap['approved_by']}, valid until {ap['expires']}, single use")
+    return 0
+
+
+def cmd_stop(gate, a):
+    p = gate.cfg["stop_file"]
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as f:
+        f.write(f"{who()} {os.environ.get('GATE_NOW', '')}\n")
+    gate.audit({"principal": who(), "operator": who(), "cr": "-", "tool": "-", "level": "-", "params": {},
+                "decision": "STOP", "reason": "emergency stop engaged", "action_hash": "", "approval": None, "exec": None})
+    print(f"STOP engaged: {p}")
+    return 0
+
+
+def cmd_resume(gate, a):
+    p = gate.cfg["stop_file"]
+    try:
+        os.remove(p)
+    except FileNotFoundError:
+        print("not stopped")
+        return 0
+    gate.audit({"principal": who(), "operator": who(), "cr": "-", "tool": "-", "level": "-", "params": {},
+                "decision": "RESUME", "reason": "emergency stop lifted", "action_hash": "", "approval": None, "exec": None})
+    print("resumed")
+    return 0
+
+
+def cmd_verify(gate, a):
+    ok, n, bad = gate.verify()
+    print(f"chain: {'ok' if ok else 'BROKEN'} ({n} records{'' if ok else f', first bad seq {bad}'})")
+    rc = 0 if ok else 1
+    if a.vl:
+        q = {"query": 'SYSLOG_IDENTIFIER:=agent-gate "seq=" | extract "seq=<seq> " | extract "hash=<hash>" | fields seq, hash', "limit": "100000"}
+        req = urllib.request.Request(a.vl.rstrip("/") + "/select/logsql/query", data=urllib.parse.urlencode(q).encode())
+        seen = {}
+        with urllib.request.urlopen(req, timeout=60) as r:
+            for line in r.read().decode("utf-8", "replace").splitlines():
+                if line.strip():
+                    d = json.loads(line)
+                    seen[str(d.get("seq"))] = d.get("hash", "").strip()
+        missing, mismatch = [], []
+        for rec in gate.records():
+            h = seen.get(str(rec["seq"]))
+            if h is None:
+                missing.append(rec["seq"])
+            elif not rec["hash"].startswith(h):
+                mismatch.append(rec["seq"])
+        print(f"journal in VictoriaLogs: {len(seen)} lines, {len(missing)} records without a line, {len(mismatch)} hash mismatches"
+              + (f"; missing {missing[:20]}" if missing else "") + (f"; mismatch {mismatch[:20]}" if mismatch else ""))
+        if missing or mismatch:
+            rc = 1
+    return rc
+
+
+def cmd_tail(gate, a):
+    for r in gate.records()[-a.n:]:
+        ex = r.get("exec") or {}
+        print(f"seq={r['seq']} {r['ts']} {r['decision']:8} {r['principal']} {r['cr']} {r['tool']} {json.dumps(r['params'], ensure_ascii=False)}"
+              + (f" rc={ex['rc']}" if "rc" in ex else "") + f"  {r['reason']}")
+    return 0
+
+
+def cmd_textfile(gate, a):
+    t = textfile.write(gate, a.out)
+    if not a.out:
+        sys.stdout.write(t)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
+    ap.add_argument("--config", default=os.environ.get("GATE_CONFIG", "/etc/onprem-agent-gate/config.json"))
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("call"); p.add_argument("cr"); p.add_argument("tool"); p.add_argument("params", nargs="*"); p.add_argument("--approval"); p.set_defaults(f=cmd_call)
+    sub.add_parser("tools").set_defaults(f=cmd_tools)
+    sub.add_parser("pending").set_defaults(f=cmd_pending)
+    p = sub.add_parser("approve"); p.add_argument("seq"); p.set_defaults(f=cmd_approve)
+    sub.add_parser("stop").set_defaults(f=cmd_stop)
+    sub.add_parser("resume").set_defaults(f=cmd_resume)
+    p = sub.add_parser("verify"); p.add_argument("--vl"); p.set_defaults(f=cmd_verify)
+    p = sub.add_parser("tail"); p.add_argument("n", nargs="?", type=int, default=20); p.set_defaults(f=cmd_tail)
+    p = sub.add_parser("textfile"); p.add_argument("--out"); p.set_defaults(f=cmd_textfile)
+    a = ap.parse_args()
+    try:
+        gate = Gate(load_config(a.config))
+    except (OSError, ValueError, GateError) as e:
+        sys.exit(f"gatectl: {e}")
+    return a.f(gate, a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

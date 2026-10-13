@@ -1,0 +1,39 @@
+# Day 29: the agent gate as alerts. gatectl textfile (cron on the collector,
+# every 5 minutes) writes agent-gate.prom. Copy into onprem-metrics
+# prometheus/rules/ (that copy is the one Prometheus loads; change both
+# together).
+groups:
+  - name: agent
+    rules:
+      - alert: AgentGateTextfileStale
+        expr: time() - agent_gate_textfile_last_run_timestamp > 1800
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "gatectl textfile has not run for 30 minutes, agent gate metrics are stale"}
+      # An irreversible action is waiting for a human. The agent is blocked
+      # until somebody runs gatectl approve (or the window closes).
+      - alert: AgentGateApprovalWaiting
+        expr: agent_gate_pending_approvals > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "{{ $value }} L3 request(s) from the agent wait for gatectl approve"}
+      # Somebody pulled the emergency stop. Every call is denied until
+      # gatectl resume; the digest should say so every day it stays on.
+      - alert: AgentGateStopped
+        expr: agent_gate_stopped == 1
+        labels: {severity: info}
+        annotations: {summary: "agent gate emergency stop is engaged, every call is denied"}
+      # The audit chain does not verify: a record was edited or removed, or
+      # the file was replaced. The WORM copy of the journal lines (hash
+      # prefixes) is what to compare against.
+      - alert: AgentGateChainBroken
+        expr: agent_gate_chain_ok == 0
+        labels: {severity: critical}
+        annotations: {summary: "agent gate audit chain does not verify; compare audit.jsonl with the journal lines in VictoriaLogs"}
+      # A few denials are normal (a wrong unit name, a call before begin).
+      # Many in an hour means the agent keeps asking for things its record
+      # does not cover: read the reasons (gatectl tail) before the window ends.
+      - alert: AgentGateDenials
+        expr: sum(increase(agent_gate_decisions_total{decision="DENY"}[1h])) > 5
+        labels: {severity: info}
+        annotations: {summary: "{{ $value | printf \"%.0f\" }} agent gate denials in the last hour"}

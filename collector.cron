@@ -1,0 +1,4 @@
+# /etc/cron.d/onprem-agent-gate on the collector. The textfile every 5
+# minutes as the gate's own user; node_exporter's textfile directory needs
+# to be writable by agent-gate (group or ACL, see docs/targets.md).
+*/5 * * * * agent-gate /opt/onprem-agent-gate/bin/gatectl textfile --out /var/lib/node_exporter/textfile/agent-gate.prom >> /var/log/onprem-metrics/agent-gate.log 2>&1

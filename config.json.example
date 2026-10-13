@@ -1,0 +1,20 @@
+{
+  "principal": "agent:ops",
+  "changes_dir": "/opt/onprem-changes/changes",
+  "state_dir": "/var/lib/onprem-changes",
+  "tools": "/etc/onprem-agent-gate/tools.json",
+  "audit": "/var/lib/onprem-agent-gate/audit.jsonl",
+  "approvals_dir": "/var/lib/onprem-agent-gate/approvals",
+  "stop_file": "/etc/onprem-agent-gate/STOP",
+  "ssh": ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=yes",
+          "-i", "/var/lib/onprem-agent-gate/.ssh/id_gate"],
+  "targets": {
+    "pve1/Proxmox VE": "gate@pve1",
+    "qdevice/Debian": "gate@qdevice",
+    "collector/Ubuntu": "local"
+  },
+  "approval_ttl_s": 600,
+  "approvers": ["implementer", "approver"],
+  "logger": "logger",
+  "stdout_limit": 65536
+}

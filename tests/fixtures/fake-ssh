@@ -1,0 +1,14 @@
+#!/bin/sh
+# fake ssh: records the target and runs the quoted command locally.
+# argv: <options...> <user@host> -- <command string>
+log=${FAKE_SSH_LOG:-/dev/null}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --) shift; break ;;
+    -o|-i) shift 2 ;;
+    *@*) echo "target $1" >> "$log"; shift ;;
+    *) shift ;;
+  esac
+done
+echo "cmd $*" >> "$log"
+eval "$*"
