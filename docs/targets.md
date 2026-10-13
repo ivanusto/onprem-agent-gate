@@ -44,8 +44,13 @@ line):
 
 ```
 # /etc/sudoers.d/agent-gate
-ivan ALL=(agent-gate) NOPASSWD: /opt/onprem-agent-gate/bin/gatectl approve *, /opt/onprem-agent-gate/bin/gatectl stop, /opt/onprem-agent-gate/bin/gatectl resume
+ivan ALL=(agent-gate) NOPASSWD: /usr/local/bin/gatectl approve *, /usr/local/bin/gatectl stop, /usr/local/bin/gatectl resume
 ```
+
+The path is the one people type (`gatectl` resolves to the /usr/local/bin
+symlink), not the target under /opt: sudo matches the command as resolved
+from PATH and would ask for a password. Files in /etc/sudoers.d must be mode
+0440 (`sudo chmod 0440 ...` after writing them), or `visudo -c` rejects them.
 
 Run as `sudo -u agent-gate gatectl approve 12`. `who()` in gatectl takes
 `SUDO_USER` first, so the approval record says `ivan`, and the gate checks

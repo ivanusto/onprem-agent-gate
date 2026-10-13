@@ -20,7 +20,7 @@ import sys
 import urllib.parse
 import urllib.request
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gate"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "gate"))
 from core import Gate, GateError, load_config  # noqa: E402
 import textfile  # noqa: E402
 
