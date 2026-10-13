@@ -50,7 +50,7 @@ DEFAULTS = {
     "tools": "/etc/onprem-agent-gate/tools.json",
     "audit": "/var/lib/onprem-agent-gate/audit.jsonl",
     "approvals_dir": "/var/lib/onprem-agent-gate/approvals",
-    "stop_file": "/etc/onprem-agent-gate/STOP",
+    "stop_file": "/var/lib/onprem-agent-gate/STOP",
     "ssh": ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=yes"],
     "targets": {},
     "approval_ttl_s": 600,

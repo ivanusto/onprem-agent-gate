@@ -16,8 +16,8 @@ each one narrow:
 ## Collector
 
 ```sh
-sudo useradd --system --home /var/lib/onprem-agent-gate --shell /usr/sbin/nologin agent-gate
-sudo install -d -o agent-gate -g agent-gate -m 0750 /var/lib/onprem-agent-gate /var/lib/onprem-agent-gate/approvals
+sudo useradd --system --home /var/lib/onprem-agent-gate --shell /bin/sh agent-gate   # sshd runs the forced command through the login shell; nologin would refuse it
+sudo install -d -o agent-gate -g agent-gate -m 0750 /var/lib/onprem-agent-gate /var/lib/onprem-agent-gate/approvals /var/lib/onprem-agent-gate/.ssh
 sudo install -d -m 0755 /etc/onprem-agent-gate
 sudo install -m 0644 tools.json /etc/onprem-agent-gate/tools.json
 sudo install -m 0644 config.json.example /etc/onprem-agent-gate/config.json   # then edit targets
