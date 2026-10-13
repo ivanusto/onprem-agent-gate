@@ -64,8 +64,11 @@ def handle(gate, msg, out):
             reply(out, id_, {"content": [{"type": "text", "text": f"gate error: {e}"}], "isError": True})
             return
         text = json.dumps(res, ensure_ascii=False, indent=1)
+        # structuredContent is the whole response, stdout included: Claude Code
+        # shows the model structuredContent instead of the text when both are
+        # present, and a subset there hid every command's output.
         reply(out, id_, {"content": [{"type": "text", "text": text}], "isError": False,
-                         "structuredContent": {k: res[k] for k in ("decision", "reason", "seq", "hash", "cr", "tool", "level")}})
+                         "structuredContent": res})
     elif id_ is not None:
         reply(out, id_, error={"code": -32601, "message": f"method not found: {method}"})
 

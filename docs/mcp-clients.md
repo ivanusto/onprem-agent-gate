@@ -25,7 +25,8 @@ claude mcp add --transport stdio onprem-gate -- ssh -i ~/.ssh/id_agent_ops agent
 ```
 
 Claude Code starts the command, sshd runs the forced `gate-mcp`, and the
-tools from tools.json appear as `mcp__onprem-gate__<tool>` with the level
+tools from tools.json appear as `mcp__onprem-gate__<tool>` (dots become
+underscores: `mcp__onprem-gate__pve_quorum_status`) with the level
 and asset in each description. The `cr` argument is required on every
 tool; the model learns from the `initialize` instructions that DENY and
 PENDING are answers to report, not errors to retry around. A sensible

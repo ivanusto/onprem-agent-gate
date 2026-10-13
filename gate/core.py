@@ -353,7 +353,7 @@ class Gate:
                 "cr": rec["cr"], "tool": rec["tool"], "level": rec["level"]}
         if decision == "PENDING":
             resp["request"] = saved["seq"]
-            resp["approve_with"] = f"sudo gatectl approve {saved['seq']}"
+            resp["approve_with"] = f"sudo -u agent-gate gatectl approve {saved['seq']}"
         if out is not None:
             resp.update({"rc": out["rc"], "stdout": out["stdout"], "stderr": out["stderr"],
                          "truncated": out["truncated"], "timed_out": out["timed_out"]})

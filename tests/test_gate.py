@@ -135,7 +135,7 @@ class Approvals(Base):
     def test_l3_pending_then_approved_single_use(self):
         r = self.gate.call("CR-2026-0015", "qdevice.reboot", {})
         self.assertEqual(r["decision"], "PENDING")
-        self.assertEqual(r["approve_with"], f"sudo gatectl approve {r['seq']}")
+        self.assertEqual(r["approve_with"], f"sudo -u agent-gate gatectl approve {r['seq']}")
         self.assertEqual([p["seq"] for p in self.gate.pending()], [r["seq"]])
         # the agent cannot approve, a stranger cannot approve
         with self.assertRaises(core.GateError):
@@ -254,6 +254,7 @@ class Mcp(Base):
         call = res[2]["result"]
         self.assertFalse(call["isError"])
         self.assertEqual(call["structuredContent"]["decision"], "ALLOW")
+        self.assertIn("stdout", call["structuredContent"])          # Claude Code reads this, not the text
         self.assertIn('"stdout": "restarted corosync-qnetd.service', call["content"][0]["text"])
         self.assertEqual(res[3]["result"]["structuredContent"]["decision"], "PENDING")
         self.assertEqual(res[4]["error"]["code"], -32601)
