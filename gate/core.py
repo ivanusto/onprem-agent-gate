@@ -153,6 +153,20 @@ class Gate:
     def begin_mark_present(self, cr):
         return os.path.exists(os.path.join(self.cfg["state_dir"], f"{cr}.state"))
 
+    def open_for_changes(self, cr):
+        """-> reason string when cr cannot carry an L2/L3 call right now, else None."""
+        meta = self.record(cr)
+        if meta is None:
+            return f"{cr}: no such change record"
+        if meta.get("status") != "in_progress":
+            return f"{cr} is {meta.get('status') or 'without status'}, not in_progress"
+        ws, we = parse_time(meta.get("window_start", "")), parse_time(meta.get("window_end", ""))
+        if ws is None or we is None or not (ws <= now() < we):
+            return f"{cr} is outside its window {meta.get('window_start', '?')} to {meta.get('window_end', '?')}"
+        if not self.begin_mark_present(cr):
+            return f"{cr} has no begin mark on file"
+        return None
+
     # ---- the decision -----------------------------------------------------
     def decide(self, cr, tool_id, params, approval=None):
         """-> (decision, reason, meta). decision ALLOW | DENY | PENDING."""
@@ -236,9 +250,11 @@ class Gate:
             raise GateError(f"no audit record with seq {seq}")
         if rec["decision"] != "PENDING":
             raise GateError(f"request {seq} is {rec['decision']}, only PENDING can be approved")
+        closed = self.open_for_changes(rec["cr"])
+        if closed:
+            # the approved call would be denied anyway; say so now, not after the agent tries
+            raise GateError(f"request {seq} cannot run: {closed}")
         meta = self.record(rec["cr"])
-        if meta is None:
-            raise GateError(f"{rec['cr']} no longer exists")
         allowed = {str(meta.get(k, "")).strip() for k in self.cfg["approvers"]} - {""}
         if approved_by not in allowed:
             raise GateError(f"{approved_by} is not the {' or '.join(self.cfg['approvers'])} of {rec['cr']} ({', '.join(sorted(allowed))})")
@@ -258,14 +274,17 @@ class Gate:
         return a
 
     def pending(self):
-        """PENDING requests that still have no approval, newest first."""
+        """PENDING requests that still have no approval and whose record can
+        still run them (in_progress, inside the window, begin mark), newest
+        first. A request left behind when the window closes stops counting, so
+        AgentGateApprovalWaiting clears with the change instead of firing on."""
         out = []
         approved = set()
         for r in self.records():
             if r["decision"] == "APPROVED":
                 approved.add(r["approval"])
         for r in self.records():
-            if r["decision"] == "PENDING" and r["seq"] not in approved:
+            if r["decision"] == "PENDING" and r["seq"] not in approved and not self.open_for_changes(r["cr"]):
                 out.append(r)
         return list(reversed(out))
 

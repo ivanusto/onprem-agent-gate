@@ -52,7 +52,7 @@ def cmd_pending(gate, a):
     rows = gate.pending()
     for r in rows:
         print(f"seq={r['seq']} {r['ts']} {r['cr']} {r['tool']} {json.dumps(r['params'], ensure_ascii=False)} "
-              f"action={r['action_hash'][:16]}  ->  sudo gatectl approve {r['seq']}")
+              f"action={r['action_hash'][:16]}  ->  sudo -u agent-gate gatectl approve {r['seq']}")
     if not rows:
         print("no pending requests")
     return 0

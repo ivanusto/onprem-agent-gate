@@ -158,6 +158,12 @@ class Approvals(Base):
         again = self.gate.call("CR-2026-0015", "qdevice.reboot", {}, approval=str(r["seq"]))
         self.assertEqual(again["decision"], "PENDING")
         self.assertIn("no approval on file", again["reason"])
+        self.assertEqual([p["seq"] for p in self.gate.pending()], [again["seq"], wrong["seq"]])
+        # the window closes with that request unapproved: it stops counting and cannot be approved
+        os.remove(os.path.join(self.state, "CR-2026-0015.state"))
+        self.assertEqual(self.gate.pending(), [])
+        with self.assertRaises(core.GateError):
+            self.gate.approve(again["seq"], "ivan")
 
     def test_approval_is_bound_to_the_action_and_expires(self):
         r = self.gate.call("CR-2026-0015", "qdevice.reboot", {})
